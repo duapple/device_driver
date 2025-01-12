@@ -1,0 +1,1 @@
+obj-y += i2c_client/

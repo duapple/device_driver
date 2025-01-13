@@ -447,5 +447,5 @@ static struct i2c_driver bmp280_driver = {
 
 module_i2c_driver(bmp280_driver);
 
-MODULE_AUTHOR("duapple <duapple2@gmail.com");
+MODULE_AUTHOR("duapple <duapple2@gmail.com>");
 MODULE_LICENSE("GPL");

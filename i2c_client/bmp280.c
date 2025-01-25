@@ -388,6 +388,11 @@ static int bmp280_probe(struct i2c_client *client, const struct i2c_device_id *i
 {
     struct bmp280_dev *bmp280;
 
+    if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+        dev_err(&client->dev, "i2c_check_functionality not support I2C_FUNC_I2C\n");
+        return -EIO;
+    }
+
     bmp280 = devm_kzalloc(&client->dev, sizeof(*bmp280), GFP_KERNEL);
     if (IS_ERR(bmp280)) {
         dev_err(&client->dev, "kzalloc fail: 0x%lx\n", PTR_ERR(bmp280));
@@ -423,7 +428,7 @@ static int bmp280_remove(struct i2c_client *client)
 }
 
 static struct i2c_device_id bmp280_id_table[] = {
-    {"bosch,bmp280", 0},
+    {"bmp280", 0},
     {},
 };
 MODULE_DEVICE_TABLE(i2c, bmp280_id_table);
@@ -439,7 +444,7 @@ static struct i2c_driver bmp280_driver = {
     .remove = bmp280_remove,
     .driver = {
         .owner = THIS_MODULE,
-        .name = "bmp280",
+        .name = "bmp280_drv",
         .of_match_table = of_match_ptr(bmp280_of_match),
     },
     .id_table = bmp280_id_table,

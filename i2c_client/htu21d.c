@@ -14,7 +14,7 @@ struct htu21d_dev {
 /* x^8 + x^5 + x^4 + 1: 100110001 (00110001 -> 0x31) */
 static u8 crc8_calcu(u8 *data, size_t len)
 {
-    /* init value: 0x0 */
+    /* init value for htu21d: 0x0 */
     u8 crc = 0x0;
     int i, j;
 
@@ -163,7 +163,7 @@ static int htu21d_read_humidity(struct htu21d_dev *htu21d, u32 *hum)
     return 0;
 }
 
-static ssize_t htu21d_temp_show(struct device *dev, struct device_attribute *attr,
+static ssize_t temperature_show(struct device *dev, struct device_attribute *attr,
                                 char *buf)
 {
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
@@ -172,15 +172,9 @@ static ssize_t htu21d_temp_show(struct device *dev, struct device_attribute *att
     htu21d_read_temperature(htu21d, &htu21d->temperature);
     return sprintf(buf, "%d\n", htu21d->temperature);
 }
+static DEVICE_ATTR_RO(temperature);
 
-static ssize_t htu21d_temp_store(struct device *dev, struct device_attribute *attr,
-                                const char *buf, size_t count)
-{
-    return 0;
-}
-static DEVICE_ATTR(temperature, 0644, htu21d_temp_show, htu21d_temp_store);
-
-static ssize_t htu21d_hum_show(struct device *dev, struct device_attribute *attr,
+static ssize_t humidity_show(struct device *dev, struct device_attribute *attr,
                                 char *buf)
 {
     struct i2c_client *client = container_of(dev, struct i2c_client, dev);
@@ -189,13 +183,7 @@ static ssize_t htu21d_hum_show(struct device *dev, struct device_attribute *attr
     htu21d_read_humidity(htu21d, &htu21d->humidity);
     return sprintf(buf, "%u\n", htu21d->humidity);
 }
-
-static ssize_t htu21d_hum_store(struct device *dev, struct device_attribute *attr,
-                                const char *buf, size_t count)
-{
-    return 0;
-}
-static DEVICE_ATTR(humidity, 0644, htu21d_hum_show, htu21d_hum_store);
+static DEVICE_ATTR_RO(humidity);
 
 static int htu21d_init(struct htu21d_dev *htu21d)
 {
@@ -219,6 +207,11 @@ static int htu21d_probe(struct i2c_client *client,
 {
     struct htu21d_dev *htu21d;
     int ret = 0;
+
+    if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
+        dev_err(&client->dev, "i2c_check_functionality not support I2C_FUNC_I2C\n");
+        return -EIO;
+    }
 
     htu21d = devm_kzalloc(&client->dev, sizeof(*htu21d), GFP_KERNEL);
     if (IS_ERR(htu21d)) {
@@ -253,7 +246,7 @@ static int htu21d_remove(struct i2c_client *client)
 }
 
 static struct i2c_device_id htu21d_id_table[] = {
-    {"se,htu21d", 0},
+    {"htu21d", 0},
     { },
 };
 MODULE_DEVICE_TABLE(i2c, htu21d_id_table);
@@ -269,7 +262,7 @@ static struct i2c_driver htu21d_driver = {
     .remove = htu21d_remove,
     .driver = {
         .owner = THIS_MODULE,
-        .name = "htu21d",
+        .name = "htu21d_drv",
         .of_match_table = of_match_ptr(htu21d_of_match),
     },
     .id_table = htu21d_id_table,

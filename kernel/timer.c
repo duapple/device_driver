@@ -1,4 +1,5 @@
 #include "linux/fs.h"
+#include "linux/interrupt.h"
 #include "linux/jiffies.h"
 #include "linux/mutex.h"
 #include "linux/of.h"
@@ -10,6 +11,7 @@
 #include <linux/cdev.h>
 #include <linux/wait.h>
 #include <linux/uaccess.h>
+#include <linux/gpio/consumer.h>
 
 struct timer_dev {
     struct platform_device *pdev;
@@ -23,6 +25,9 @@ struct timer_dev {
     struct mutex lock;
     char buf[128];
     u8 ready;
+
+    struct gpio_desc *intb;
+    int irq;
 };
 
 static int timer_cdev_open(struct inode *inode, struct file *filp)
@@ -81,6 +86,12 @@ static void timer_cb(struct timer_list *timer)
     mutex_unlock(&tim->lock);
 }
 
+static irqreturn_t intb_irq_handler(int irq, void *data)
+{
+    pr_err("intb irq handler\n");
+    return IRQ_HANDLED;
+}
+
 static int timer_probe(struct platform_device *pdev)
 {
     struct timer_dev *tim;
@@ -93,31 +104,57 @@ static int timer_probe(struct platform_device *pdev)
     platform_set_drvdata(pdev, tim);
 
     timer_setup(&tim->timer, timer_cb, 0);
-    mod_timer(&tim->timer, jiffies + msecs_to_jiffies(1000));
+    // mod_timer(&tim->timer, jiffies + msecs_to_jiffies(1000));
 
-    alloc_chrdev_region(&tim->dev_id, 0, 1, "timer_cdev");
+    ret = alloc_chrdev_region(&tim->dev_id, 0, 1, "timer_cdev");
+    if (ret) {
+        return -ENODEV;
+    }
+
     cdev_init(&tim->cdev, &timer_cdev_fops);
     
     ret = cdev_add(&tim->cdev, tim->dev_id, 1);
     if (ret) {
-        return ret;
+        goto err1;
     }
 
     tim->class = class_create(THIS_MODULE, "timer_cdev");
     if (IS_ERR(tim->class)) {
-        return PTR_ERR(tim->class);
+        ret = PTR_ERR(tim->class);
+        goto err2;
     }
 
     tim->device = device_create(tim->class, &pdev->dev, tim->dev_id, NULL, "timer_cdev");
     if (IS_ERR(tim->device)) {
-        return PTR_ERR(tim->device);
+        ret = PTR_ERR(tim->device);
+        goto err3;
     }
 
     init_waitqueue_head(&tim->wq);
     mutex_init(&tim->lock);
 
+    tim->intb = devm_gpiod_get(&pdev->dev, "intb", GPIOD_IN);
+    if (IS_ERR(tim->intb)) {
+        ret = PTR_ERR(tim->intb);
+        goto err3;
+    }
+
+    tim->irq = gpiod_to_irq(tim->intb);
+    ret = devm_request_threaded_irq(&pdev->dev, tim->irq, NULL, intb_irq_handler,
+        IRQF_ONESHOT | IRQF_TRIGGER_FALLING, "intb", tim);
+    if (ret) {
+        goto err3;
+    }
+
     dev_info(&pdev->dev, "timer probe");
     return 0;
+err3:
+    class_destroy(tim->class);
+err2:
+    cdev_del(&tim->cdev);
+err1:
+    unregister_chrdev_region(tim->dev_id, 1);
+    return ret;
 }
 
 static int timer_remove(struct platform_device *pdev)

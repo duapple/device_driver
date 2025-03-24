@@ -118,13 +118,13 @@ static int timer_probe(struct platform_device *pdev)
         goto err1;
     }
 
-    tim->class = class_create(THIS_MODULE, "timer_cdev");
+    tim->class = class_create(THIS_MODULE, "timer_cdev_class");
     if (IS_ERR(tim->class)) {
         ret = PTR_ERR(tim->class);
         goto err2;
     }
 
-    tim->device = device_create(tim->class, &pdev->dev, tim->dev_id, NULL, "timer_cdev");
+    tim->device = device_create(tim->class, &pdev->dev, tim->dev_id, NULL, "timer_dev");
     if (IS_ERR(tim->device)) {
         ret = PTR_ERR(tim->device);
         goto err3;
@@ -136,18 +136,20 @@ static int timer_probe(struct platform_device *pdev)
     tim->intb = devm_gpiod_get(&pdev->dev, "intb", GPIOD_IN);
     if (IS_ERR(tim->intb)) {
         ret = PTR_ERR(tim->intb);
-        goto err3;
+        goto err4;
     }
 
     tim->irq = gpiod_to_irq(tim->intb);
     ret = devm_request_threaded_irq(&pdev->dev, tim->irq, NULL, intb_irq_handler,
         IRQF_ONESHOT | IRQF_TRIGGER_FALLING, "intb", tim);
     if (ret) {
-        goto err3;
+        goto err4;
     }
 
     dev_info(&pdev->dev, "timer probe");
     return 0;
+err4:
+    device_destroy(tim->class, tim->dev_id);
 err3:
     class_destroy(tim->class);
 err2:
